@@ -28,6 +28,3 @@ jobs:
         with:
           artifacts: bin/*
           token: ${{ secrets.GITHUB_TOKEN }}
-  
-  create-release:
-    runs-on: ubuntu-latest
