@@ -2,6 +2,8 @@ const defaultConf = {
     active: false,
     __comment: "Projects path should be a path to where on your system dlsl_preproc should create and look for lsl work by default",
     projectsPath: "",
+    projectConfigPath: "",
+    port: 3929,
     editor: {
         __comment: {
             "path": "This should tore the path to the editor you wish to use.",
@@ -28,6 +30,7 @@ const defaultConf = {
         },
         cmdPrefix:  "d_",
         passThroughPrefix: "f_",
+        allowHttpInclude: false,
         override: {
             __comment: "This section allows using a custom preprocessor",
             enabled: false,
@@ -50,21 +53,20 @@ export function defaultConfig(): ConfDefault {
 export type ConfDefault = {
     active: boolean;
     projectsPath: string;
+    projectConfigPath: string;
+    port: number;
     editor: {
         path: string;
         args: string[];
     };
-    
     lsl_includes: {
-        __comment: {
-            path: "Path to find absolute lsl files to include",
-        },
         path: string,
         globalInclude: string;
     };
     preprocessor: {
         cmdPrefix: string;
         passThroughPrefix: string;
+        allowHttpInclude: boolean;
         override: ConfPreprocessorOverride;
     };
 }

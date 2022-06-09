@@ -1,18 +1,45 @@
-import type { Config } from "./config/config.ts";
+import type { InstanceConfig } from "./config/instanceConfig.ts";
 import type { iPreprocessor } from "./interfaces.d.ts";
-import {sha256String} from "./misc.ts";
+import { sha256String } from "./misc.ts";
+import { Watcher } from "./watcher.ts";
+import { ExternalPreprocessor } from "./externalPreprocessor.ts";
+import { Preprocessor } from "./preprocessor/preprocessor.ts";
 
 export class PreProcessorContainer {
     private filePath: string;
-    private config: Config;
+    private config: InstanceConfig;
     private outputFile: string;
     private preprocessor: iPreprocessor;
+    private watcher: Watcher;
 
-    constructor(config: Config, preprocessor: iPreprocessor) {
-        this.filePath = config.instance.filePath;
-        this.outputFile = config.instance.lslFile;
+    constructor(config: InstanceConfig, preprocessor: iPreprocessor) {
+        this.filePath = config.filePath;
+        this.outputFile = config.lslFile;
         this.config = config;
         this.preprocessor = preprocessor;
+        this.watcher = new Watcher(config);
+        this.watcher.hook(() => {
+            this.process();
+        });
+    }
+
+    async start() {
+        await this.dryRun();
+        this.watcher.start();
+    }
+
+    stop() {
+        this.watcher.stop();
+    }
+
+
+    async dryRun() {
+        try {
+            await this.runPreporcessor();
+            this.watcher.addFiles(this.preprocessor.getUsedFiles());
+        } catch (e) {
+            console.log(e);
+        }
     }
 
     private async runPreporcessor(): Promise<string> {
@@ -27,30 +54,43 @@ export class PreProcessorContainer {
     async process() {
         console.log("Preprocessing...");
         try {
-            const raw = await this.runPreporcessor();
-            await this.output(raw);
+            const content = await this.runPreporcessor();
+            this.watcher.addFiles(this.preprocessor.getUsedFiles());
+            await this.output(content);
+            console.log("Complete\n");
         } catch (e) {
             console.error(e);
         }
     }
 
-    private async output(raw: string): Promise<void> {
+
+    private async output(text: string): Promise<void> {
         try {
-            const hashHex = sha256String(raw);
+            const hashHex = await sha256String(text);
             const content = [
-                `//#dlsl_dir ${this.config.instance.project}`,
-                `//#dlsl_file ${this.config.instance.main}`,
+                `//#dlsl_dir ${this.config.project}`,
+                `//#dlsl_file ${this.config.main}`,
                 `//#dlsl_hash ${hashHex}`,
                 ``,
-                raw,
+                text,
             ].join("\n");
 
-            console.log(content);
+            // console.log(content);
 
             await Deno.writeTextFile(this.outputFile, content);
         } catch (e) {
             console.error("Write Failed");
             throw e;
+        }
+    }
+
+
+
+    public static getPreProc(config: InstanceConfig): iPreprocessor {
+        if (config.params.preprocessor.override.enabled) {
+            return new ExternalPreprocessor(config.params.preprocessor.override);
+        } else {
+            return new Preprocessor(config);
         }
     }
 }

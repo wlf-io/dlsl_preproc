@@ -1,14 +1,13 @@
 import { Preprocessor } from "./preprocessor.ts";
 import { Path } from "../../deps.ts";
-
-
-import { ltrim, rtrim } from "../misc.ts";
+import { ltrim, rtrim, sha256String } from "../misc.ts";
 
 export class PPFileHandler {
     private filePath: string;
     private preprocessor: Preprocessor;
     private stack: string[];
     private integrity: string | null;
+    private sha = "";
 
     private text = "";
 
@@ -21,15 +20,40 @@ export class PPFileHandler {
     constructor(filePath: string, preprocessor: Preprocessor, stack: string[], integrity: string | null = null) {
         this.filePath = filePath;
         this.preprocessor = preprocessor;
-        this.stack = [...stack];
+        this.stack = [...stack, this.filePath];
         this.integrity = integrity;
+    }
+
+    private async getFileContent(): Promise<string> {
+        if (this.filePath.startsWith("https://")) {
+            return await this.getUrlContent();
+        } else {
+            this.preprocessor.addFile(this.filePath);
+            return await Deno.readTextFile(this.filePath);
+        }
+    }
+
+    private async getUrlContent(): Promise<string> {
+        throw "Http include not yet supported.";
+    }
+
+    private async loadContent(): Promise<void> {
+        this.text = await this.getFileContent();
+        this.sha = await sha256String(this.text);
+        if (this.integrity) {
+            if (this.sha != this.integrity) {
+                throw new IntegrityError();
+            }
+        }
     }
 
     async process(): Promise<string> {
         this.line = 0;
         const output: string[] = [];
 
-        this.text = await Deno.readTextFile(this.filePath);
+        this.text = await this.getFileContent();
+
+
 
         this.lines = this.text.split("\n");
 
@@ -171,43 +195,51 @@ export class PPFileHandler {
     }
 
     private async include(rpath: string): Promise<string> {
-        let [path, rest] = this.resolvePath(rpath);
+        let [path, opath, rest] = this.resolvePath(rpath);
         rest = rest.trim();
-        console.log("#include relative", path, rest);
-        return `` +
-            `// INCLUDE START ${rpath} @ ${Path.basename(this.filePath)}(${this.line}) - ${path} - [${rest}]\n`
-            + ``
-            + `// INCLUDE END`
-        ;
+
+        const handler = new PPFileHandler(path, this.preprocessor, [...this.stack], rest);
 
 
-        throw this.croakOnLine("#include not implemented");
-        const handler = new PPFileHandler(path, this.preprocessor, this.stack);
-        return await handler.process();
+        try {
+            return `` +
+                `// INCLUDE START ${rpath} @ ${Path.basename(this.filePath)}(${this.line}) - [${rest.replaceAll("\n", "\\n")}]\n`
+                + (await handler.process())
+                + `// INCLUDE END`;
+        } catch (e) {
+            if (e instanceof Deno.errors.NotFound) {
+                throw this.croakOnLine(`Cannot find '${opath}' to include`);
+            }
+            if (e instanceof IntegrityError) {
+                throw this.croakOnLine(`Loaded file '${path}' integrity mismatch`);
+            }
+            throw e;
+        }
     }
 
-    private resolvePath(text: string): [string, string] {
+    private resolvePath(text: string): [string, string, string] {
         text = ltrim(text);
         if (!text.startsWith('"')) throw this.croakOnLine("#include'd file must be quoted with \" marks");
         let [path, rest] = this.readUntilChar(text.substring(1), '"');
+        const opath = path + "";
         if (path.startsWith("//")) {
             path = this.preprocessor.config.params.lsl_includes.path + Path.SEP + ltrim(path, "/");
         } else if (path.startsWith("/")) {
             if (this.filePath.toLowerCase().startsWith("https://")) {
-                return [Path.dirname(this.filePath) + Path.SEP + path, rest];
+                return [Path.dirname(this.filePath) + Path.SEP + path, opath, rest];
             }
-            path = this.preprocessor.config.instance.dirPath + Path.SEP + ltrim(path, "/");
+            path = this.preprocessor.config.dirPath + Path.SEP + ltrim(path, "/");
         } else if (path.startsWith(".")) {
             path = Path.dirname(this.filePath) + Path.SEP + path;
             if (this.filePath.toLowerCase().startsWith("https://")) {
-                return [path,rest];
+                return [path, opath, rest];
             }
         } else if (path.startsWith("https://")) {
-            return [path,rest];
+            return [path, opath, rest];
         } else {
             throw this.croakOnLine(`#inlcude path invalid`);
         }
-        return [Path.normalize(path), rest];
+        return [Path.normalize(path), opath, rest];
     }
 
     private readUntilChar(subject: string, char: string, escape = "\\") {
@@ -230,3 +262,6 @@ export class PPFileHandler {
         return [out,subject];
     }
 }
+
+
+class IntegrityError extends Error { }

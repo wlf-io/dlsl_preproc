@@ -10,20 +10,12 @@ export class Config {
     private json = "";
     private _params:ConfDefault = defaultConfig();
 
-    private _inststance:InstanceConfig;
-
-
-    constructor(homePath: string, lslFilePath:string) {
+    constructor(homePath: string) {
         this.homePath = homePath;
-        this._inststance = new InstanceConfig(this, lslFilePath);
     }
 
     private get path(): string {
         return this.homePath + Path.SEP + this.fileName;
-    }
-
-    public get instance() : InstanceConfig {
-        return this._inststance;
     }
 
     public get params() : ConfDefault {
@@ -47,7 +39,6 @@ export class Config {
             throw `Config loaded with errors:\t` + errors.join("\n\t");
         }
         await this.validateConfig();
-        await this._inststance.load();
     }
 
     private async loadJsonFromFile() {

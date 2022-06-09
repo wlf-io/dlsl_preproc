@@ -1,19 +1,25 @@
-import type {Config} from "./config/config.ts";
+import type { InstanceConfig } from "./config/instanceConfig.ts";
 
-export class Watcher{
-    private filePath:string;
-    private watcher:Deno.FsWatcher|null = null;
+export class Watcher {
+    private filePath: string;
+    private watcher: Deno.FsWatcher | null = null;
 
-    private timeout:number|null = null;
+    private timeout: number | null = null;
 
-    private hooks:(()=>void)[] = [];
+    private hooks: (() => void)[] = [];
 
-    constructor(config:Config){
-        this.filePath = config.instance.filePath;
+    private _files: string[] = [];
+
+    constructor(config: InstanceConfig) {
+        this.filePath = config.filePath;
     }
 
-    private callHooks(){
-        if(this.timeout){
+    get files(): string[] {
+        return [this.filePath, ...this._files];
+    }
+
+    private callHooks() {
+        if (this.timeout) {
             self.clearTimeout(this.timeout);
         } else {
             console.log("Save detected...");
@@ -21,23 +27,31 @@ export class Watcher{
         this.timeout = self.setTimeout(() => {
             this.timeout = null;
             this.hooks.forEach(h => h());
-        },2000);
+        }, 2000);
     }
 
-    async start(){
-        this.watcher = Deno.watchFs(this.filePath);
-        for await(const event of this.watcher){
-            if(event.kind == "modify"){
+    async start() {
+        this.watcher = Deno.watchFs(this.files);
+        for await (const event of this.watcher) {
+            if (event.kind == "modify") {
                 this.callHooks();
             }
         }
     }
 
-    public hook(cb:()=>void){
+    public hook(cb: () => void) {
         this.hooks.push(cb);
     }
 
-    stop(){
+    addFiles(files: string[]): void {
+        this._files = [...files].filter((v, i, a) => a.indexOf(v) === i);
+        if (this.watcher) {
+            this.stop();
+            this.start();
+        }
+    }
+
+    stop() {
         this.watcher?.close();
     }
 }

@@ -16,4 +16,8 @@ export class ExternalPreprocessor implements iPreprocessor {
         if (s.success) return "";
         else throw "External Preproc Failed";
     }
+
+    getUsedFiles(): string[] {
+        return [];
+    }
 }

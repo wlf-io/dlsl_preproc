@@ -4,7 +4,7 @@ import {Path} from "../../deps.ts";
 
 export class InstanceConfig {
     private _lslFile: string;
-    private config: Config;
+    private _config: Config;
 
     private dir: null | string = null;
     private file: null | string = null;
@@ -13,8 +13,16 @@ export class InstanceConfig {
     private noFile = false;
 
     constructor(config: Config, lslFile: string) {
-        this.config = config;
+        this._config = config;
         this._lslFile = lslFile;
+    }
+
+    get config(): Config {
+        return this._config;
+    }
+
+    get params() {
+        return this.config.params;
     }
 
     get lslFile():string{
@@ -26,7 +34,7 @@ export class InstanceConfig {
     }
 
     get dirPath():string {
-        return `${this.config.params.projectsPath}${Path.SEP}${this.dir}${Path.SEP}`;
+        return `${this.params.projectsPath}${Path.SEP}${this.dir}${Path.SEP}`;
     }
 
     get project():string{
@@ -35,6 +43,17 @@ export class InstanceConfig {
 
     get main():string {
         return this.file || "";
+    }
+
+    toJSON() {
+        return {
+            params: this.params,
+            lslFile: this.lslFile,
+            filePath: this.filePath,
+            dirPath: this.dirPath,
+            main: this.main,
+            project: this.project,
+        }
     }
 
     async load() {
