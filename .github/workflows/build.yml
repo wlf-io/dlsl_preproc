@@ -21,7 +21,13 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
-          path: bin/*
+          name: dlsl_preproc.exe
+          path: bin/dlsl_preproc.exe
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: dlsl_preproc
+          path: bin/dlsl_preproc
       - name: Release
         if: contains(github.ref, 'tags/v')
         uses: ncipollo/release-action@v1
