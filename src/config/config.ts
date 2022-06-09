@@ -30,7 +30,7 @@ export class Config {
         return this._params;
     }
 
-    private async writeConfigFile(content: { [k: string]: any }) {
+    private async writeConfigFile(content: sObj) {
         await Deno.writeTextFile(this.path, JSON.stringify(content, null, 2));
     }
 
@@ -106,7 +106,7 @@ export class Config {
         }
     }
 
-    private loadMissingConfig(config: { [k: string]: any }, def: { [k: string]: any }, path = ""): string[] {
+    private loadMissingConfig(config: sObj, def: sObj, path = ""): string[] {
         const errors = [];
         for (const [key, value] of Object.entries(def)) {
             const confVal = config[key];
@@ -120,7 +120,7 @@ export class Config {
                 } else if (confVal === null) {
                     errors.push(`Config path ${path + key} expected not to be [null]`);
                 } else if (typeof value === "object" && !(value instanceof Array)) {
-                    errors.push(...this.loadMissingConfig(confVal, value, `${path}${key}.`));
+                    errors.push(...this.loadMissingConfig(confVal as sObj, value as sObj, `${path}${key}.`));
                 }
             }
         }
@@ -133,3 +133,7 @@ export class Config {
         throw `Config at '${this.path}' is invalid.\nBacked up to '${this.path + ".bak"}'\nA fresh config has been created.`;
     }
 }
+
+type sType = number | null | boolean | string | sType[] | sObj;
+
+type sObj = { [k: string]: sType };

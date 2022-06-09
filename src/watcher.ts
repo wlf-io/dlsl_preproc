@@ -14,11 +14,11 @@ export class Watcher{
 
     private callHooks(){
         if(this.timeout){
-            window.clearTimeout(this.timeout);
+            self.clearTimeout(this.timeout);
         } else {
             console.log("Save detected...");
         }
-        this.timeout = window.setTimeout(()=>{
+        this.timeout = self.setTimeout(() => {
             this.timeout = null;
             this.hooks.forEach(h => h());
         },2000);

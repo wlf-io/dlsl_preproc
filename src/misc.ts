@@ -1,11 +1,11 @@
-export function ltrim(subject: string, characters: string = ' \\s\u00A0') {
+export function ltrim(subject: string, characters = ' \\s\u00A0') {
   characters = (characters + '').replace(/([[\]().?/*{}+$^:])/g, '$1')
   const re = new RegExp('^[' + characters + ']+', 'g')
   return (subject + '')
     .replace(re, '')
 }
 
-export function rtrim(subject: string, characters: string = ' \\s\u00A0') {
+export function rtrim(subject: string, characters = ' \\s\u00A0') {
   characters = (characters + '').replace(/([[\]().?/*{}+$^:])/g, '\\$1')
   const re = new RegExp('[' + characters + ']+$', 'g')
   return (subject + '').replace(re, '')

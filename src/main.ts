@@ -15,14 +15,14 @@ function getHomeDir(): Promise<string> {
 }
 
 
-async function readLSL(filePath: string) {
-    console.log(filePath);
-    const file = await Deno.open(filePath);
-    console.log("Spl:", filePath.split(Path.SEP));
-    console.log("Dir:", Path.dirname(filePath));
-    console.log("Nsp:", Path.toNamespacedPath(filePath));
-    console.log("Abs:", Path.isAbsolute(filePath));
-}
+// async function readLSL(filePath: string) {
+//     console.log(filePath);
+//     const file = await Deno.open(filePath);
+//     console.log("Spl:", filePath.split(Path.SEP));
+//     console.log("Dir:", Path.dirname(filePath));
+//     console.log("Nsp:", Path.toNamespacedPath(filePath));
+//     console.log("Abs:", Path.isAbsolute(filePath));
+// }
 
 function runProc(config: Config) {
     if (isWindows) {
