@@ -59,11 +59,8 @@ async function setupTcpListen(config: Config) {
         b = b.slice(0, n);
         const msg = d.decode(b);
         let handled = false;
-        console.log("MSG: |" + msg + "|");
-        prompt();
         try {
             const data = JSON.parse(msg);
-            console.log(data);
             if (typeof data === "object" && data !== null && !(data instanceof Array)) {
                 if (data.req === "new_preproc" && data.args instanceof Array && data.args.length > 0) {
                     startProc(data.args);
