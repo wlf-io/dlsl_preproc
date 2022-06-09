@@ -18,3 +18,16 @@ jobs:
         run: make install
       - name: build
         run: make build
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          path: bin/*
+      - name: Release
+        if: contains(github.ref, 'tags/v')
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: bin/*
+          token: ${{ secrets.GITHUB_TOKEN }}
+  
+  create-release:
+    runs-on: ubuntu-latest
