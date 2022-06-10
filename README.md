@@ -16,6 +16,14 @@ To build this yourself you need:
 If you do not have `make`` installed you can run the deno compile command directly, bu looking inside the makefile.
 I plan to move this to a deno config file at some point.
 
+Vaguely this project needs splitting into two parts, the preprocessor and the firestorm compatability layer.
+
+# Features
+
+ - COMMANDS!!! (obviously, see the list below)
+ - Run on changes to any files in the include tree
+ - Handles multiple scripts being open
+
 
 # Currenlty suported commands
 
@@ -37,6 +45,7 @@ Commands can be multiplined using a trailing `\`
  - finish #define support
  - #if
  - #elif (#elseif)
+- Let dlsl_preproc only handle file watching and dealing with firestorm, and overide the actual preprocessing to anything you want.
 
 # Commands
 
@@ -91,7 +100,7 @@ So if you include `https://example.test/example/test.lsl` and it contains the fo
 
 **Warning**: this can be dangerous if you do not control the resources hosted at the url. You should be sure and check what you are including youself.
 
-To help with this though the preprocessor does also includ an integrity feature.
+To help with this though the preprocessor does also include an integrity feature. Allowing you to check a file once and be aware if it changes (bar carefully crafted hash coliding files)
 
 ```c
 #include "https://example.test/script.lsl" 7dad138a707ebcce44f659efc04add18ee66db47
@@ -101,6 +110,8 @@ To help with this though the preprocessor does also includ an integrity feature.
 ```
 
 Integrity checks also work on local files, but that's probably less important
+
+Includes with integrity strings will also be cached in the derectory specified in the config. Or in a folders called `cache`, next to the binary. So you could use a hash to fix a particular version of a file.
 
 
 ## #define
@@ -163,7 +174,7 @@ Will cause the preprocessor to error and print the text after the command to the
             "-w"
         ],
         "__comment": {
-            "path": "This should tore the path to the editor you wish to use.",
+            "path": "This path to the editor you wish to use. (Windows requires an absoloute path for now)",
             "path example": "code",
             "args": "Array of arguments for the editor, $path will be replaced with the folder path to open, or if not present it will just be appended"
         }

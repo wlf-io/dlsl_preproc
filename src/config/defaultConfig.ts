@@ -13,7 +13,7 @@ const defaultConf: ConfDefault = {
             "-w",
         ],
         __comment: {
-            "path": "This should tore the path to the editor you wish to use.",
+            "path": "This path to the editor you wish to use. (Windows requires an absoloute path for now)",
             "path example": "code",
             "args": "Array of arguments for the editor, $path will be replaced with the folder path to open, or if not present it will just be appended",
         },
