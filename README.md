@@ -23,6 +23,7 @@ Vaguely this project needs splitting into two parts, the preprocessor and the fi
  - COMMANDS!!! (obviously, see the list below)
  - Run on changes to any files in the include tree
  - Handles multiple scripts being open
+ - command passthrough (allow commands to be passed through to the firestorm preprocessor) see config
 
 
 # Currenlty suported commands
@@ -188,7 +189,7 @@ Will cause the preprocessor to error and print the text after the command to the
         }
     },
     "preprocessor": {
-        "cmdPrefix": "d_",
+        "cmdPrefix": "",
         "passThroughPrefix": "f_",
         "allowHttpInclude": false,
         "httpCacheDir": "",
