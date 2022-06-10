@@ -10,16 +10,17 @@ Then configuring your own editor in the config file `<user home>/.deno_lsl_prepr
 To build this yourself you need:
  - [Deno](https://deno.land) installed
  - clone this repo
+ - `make` installed (optional)
  - run `make build-linux` or `make build-win`
 
-If you do not ahve make installed you can run the deno compile command directly, bu looking inside the makefile.
+If you do not have `make`` installed you can run the deno compile command directly, bu looking inside the makefile.
 I plan to move this to a deno config file at some point.
 
 
 # Currenlty suported commands
 
  - #include
- - #define *
+ - #define `*`
  - #undef (#undefine)
  - #ifdef
  - #ifndef
@@ -28,7 +29,7 @@ I plan to move this to a deno config file at some point.
  - #warning
  - #error
 
-* Partial support
+`*` Partial support
 
 Commands can be multiplined using a trailing `\`
 
