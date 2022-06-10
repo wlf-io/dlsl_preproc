@@ -88,7 +88,7 @@ export class Config {
 
     private async validateConfig() {
         const errors:string[] = [];
-        if (this._params.active !== true) {
+        if (this.params.active !== true) {
             errors.push(`Config at '${this.path}' is inactive.`);
         }
         if (this.params.projectsDir.length < 1) {
@@ -96,10 +96,12 @@ export class Config {
         } else {
             errors.push(...(await this.testDirectory(this.params.projectsDir, "projectsDir")));
         }
-        if (this._params.lsl_includes.dir.length < 1) {
+        if (this.params.lsl_includes.dir.length < 1) {
             this.params.lsl_includes.dir = this.params.projectsDir;
         }
-        errors.push(...(await this.testDirectory(this.params.lsl_includes.dir, "lsl_includes.dir")));
+        if (this.params.lsl_includes.dir.length) {
+            errors.push(...(await this.testDirectory(this.params.lsl_includes.dir, "lsl_includes.dir")));
+        }
 
         if (this.params.preprocessor.httpCacheDir.length < 1) {
             this.params.preprocessor.httpCacheDir = Path.dirname(Deno.execPath()) + Path.SEP + "cache";

@@ -1,11 +1,19 @@
 # dlsl_preproc
-A pre processor for LSL written in typescript using deno
+A pre processor for LSL written in typescript using [Deno](https://deno.land)
 
 This was mostly a Proof of Concept that has gotten a little out of hand. And thus is poorly implemented IMO, and needs reworking.
 
 It is currenlty designed to be used with firestorm by setting the executable as your external editor
 
 Then configuring your own editor in the config file `<user home>/.deno_lsl_preproc.json`
+
+To build this yourself you need:
+ - [Deno](https://deno.land) installed
+ - clone this repo
+ - run `make build-linux` or `make build-win`
+
+If you do not ahve make installed you can run the deno compile command directly, bu looking inside the makefile.
+I plan to move this to a deno config file at some point.
 
 
 # Currenlty suported commands
@@ -22,7 +30,7 @@ Then configuring your own editor in the config file `<user home>/.deno_lsl_prepr
 
 * Partial support
 
-Commands can be multiplined using a trailing `\\`
+Commands can be multiplined using a trailing `\`
 
 # Planned Commands
  - finish #define support
