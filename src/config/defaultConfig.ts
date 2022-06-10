@@ -27,7 +27,7 @@ const defaultConf: ConfDefault = {
         },
     },
     preprocessor: {
-        cmdPrefix: "d_",
+        cmdPrefix: "",
         passThroughPrefix: "f_",
         allowHttpInclude: false,
         httpCacheDir: "",
