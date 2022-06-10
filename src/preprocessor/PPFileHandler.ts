@@ -1,13 +1,12 @@
 import { Preprocessor } from "./preprocessor.ts";
 import { Path } from "../../deps.ts";
-import { ltrim, rtrim, sha256String } from "../misc.ts";
+import { ltrim, rtrim, sha1String } from "../misc.ts";
 
 export class PPFileHandler {
     private filePath: string;
     private preprocessor: Preprocessor;
     private stack: string[];
     private integrity: string | null;
-    private sha = "";
 
     private text = "";
 
@@ -15,17 +14,37 @@ export class PPFileHandler {
 
     private lines: string[] = [];
 
-    private elsed = false;
+    private ishttp = false;
+
+    public sha = "";
 
     constructor(filePath: string, preprocessor: Preprocessor, stack: string[], integrity: string | null = null) {
         this.filePath = filePath;
+        this.ishttp = this.filePath.toLowerCase().startsWith("https://");
+
         this.preprocessor = preprocessor;
+        if (stack.filter(f => f == filePath).length > 10) {
+            throw "Recusive include??? depth passed 10";
+        }
         this.stack = [...stack, this.filePath];
-        this.integrity = integrity;
+        integrity = (integrity ?? "").trim().toLowerCase();
+        if (integrity.length > 0) {
+            if ((/^[0-9a-f]{40}$/i).test(integrity)) {
+                this.integrity = integrity;
+            } else {
+                throw "Invalid integrity string";
+            }
+        } else {
+            this.integrity = null;
+        }
+
+        if (!this.preprocessor.config.params.preprocessor.allowHttpInclude && this.ishttp) {
+            throw "Https includes are not enabled";
+        }
     }
 
     private async getFileContent(): Promise<string> {
-        if (this.filePath.startsWith("https://")) {
+        if (this.ishttp) {
             return await this.getUrlContent();
         } else {
             this.preprocessor.addFile(this.filePath);
@@ -33,16 +52,35 @@ export class PPFileHandler {
         }
     }
 
+    private get httpCachePath(): string {
+        return this.preprocessor.config.params.preprocessor.httpCacheDir + Path.SEP + this.integrity;
+    }
+
     private async getUrlContent(): Promise<string> {
-        throw "Http include not yet supported.";
+        if (this.integrity) {
+            try {
+                return await Deno.readTextFile(this.httpCachePath);
+            } catch (e) {
+                if (!(e instanceof Deno.errors.NotFound)) {
+                    throw e;
+                }
+            }
+        }
+        const req = await fetch(this.filePath);
+        const text = await req.text();
+        this.sha = await sha1String(text);
+        return text;
     }
 
     private async loadContent(): Promise<void> {
         this.text = await this.getFileContent();
-        this.sha = await sha256String(this.text);
         if (this.integrity) {
+            this.sha = await sha1String(this.text);
             if (this.sha != this.integrity) {
-                throw new IntegrityError();
+                throw new IntegrityError(this.filePath, this.integrity, this.sha);
+            }
+            if (this.ishttp) {
+                await Deno.writeTextFile(this.httpCachePath, this.text);
             }
         }
     }
@@ -109,7 +147,7 @@ export class PPFileHandler {
                 break;
             case "ifdef": {
                 const arg = arg1();
-                if (arg == "") throw this.croakOnLine(`name for ${cmd} empty`);
+                if (arg == "") throw this.croakOnLine(`name for #${cmd} empty`);
                 if (this.preprocessor.getDefine(arg) === null) {
                     this.advanceUntilConditionalEnd();
                 }
@@ -117,7 +155,7 @@ export class PPFileHandler {
             }
             case "ifndef": {
                 const arg = arg1();
-                if (arg == "") throw this.croakOnLine(`name for ${cmd} empty`);
+                if (arg == "") throw this.croakOnLine(`name for #${cmd} empty`);
                 if (this.preprocessor.getDefine(arg) !== null) {
                     this.advanceUntilConditionalEnd();
                 }
@@ -132,7 +170,7 @@ export class PPFileHandler {
             case "undefine":
             case "undef": {
                 const arg = arg1();
-                if (arg == "") throw this.croakOnLine(`name for ${cmd} empty`);
+                if (arg == "") throw this.croakOnLine(`name for #${cmd} empty`);
                 this.preprocessor.undefine(arg);
                 return [];
             }
@@ -141,12 +179,23 @@ export class PPFileHandler {
             case "error":
                 throw this.croakOnLine(line);
             case "warning":
-                console.log(this.croakOnLine(line));
+                console.warn(this.croakOnLine(line));
                 return [];
+            case "config":
+            case "conf": {
+                try {
+                    const param = arg1();
+                    const val = JSON.parse(parts.join(" ").trim());
+                    this.preprocessor.setConf(param, val);
+                } catch (e) {
+                    throw this.croakOnLine(`#${cmd} failed, ${e.toString()}`);
+                }
+                return [];
+            }
             case "if":
             case "elif":
             case "elseif":
-                throw this.croakOnLine(`${cmd} not implemented`);
+                throw this.croakOnLine(`#${cmd} not implemented`);
             default: {
                 const pp = this.preprocessor.config.params.preprocessor.passThroughPrefix;
                 if(pp.length){
@@ -156,7 +205,7 @@ export class PPFileHandler {
                         return [raw];
                     }
                 }
-                throw this.croakOnLine(`${cmd} not recognised`);
+                throw this.croakOnLine(`#${cmd} not recognised`);
             }
         }
         return [];
@@ -186,8 +235,9 @@ export class PPFileHandler {
         console.log(`${this.onLine()} ${text}`);
     }
 
-    private croakOnLine(croak: string): string {
-        return `${croak.trim()} ${this.onLine()}`;
+    private croakOnLine(croak: string, trim = true): string {
+        if (trim) croak = croak.trim();
+        return `${croak} ${this.onLine()}`;
     }
 
     private onLine(): string {
@@ -198,20 +248,20 @@ export class PPFileHandler {
         let [path, opath, rest] = this.resolvePath(rpath);
         rest = rest.trim();
 
-        const handler = new PPFileHandler(path, this.preprocessor, [...this.stack], rest);
-
-
         try {
+            const handler = new PPFileHandler(path, this.preprocessor, [...this.stack], rest);
             return `` +
-                `// INCLUDE START ${rpath} @ ${Path.basename(this.filePath)}(${this.line}) - [${rest.replaceAll("\n", "\\n")}]\n`
+                `// INCLUDE START '${opath}' @ ${Path.basename(this.filePath)}(${this.line})\n`
                 + (await handler.process())
-                + `// INCLUDE END`;
+                + `// INCLUDE END - ${handler.sha}`;
         } catch (e) {
             if (e instanceof Deno.errors.NotFound) {
                 throw this.croakOnLine(`Cannot find '${opath}' to include`);
             }
             if (e instanceof IntegrityError) {
-                throw this.croakOnLine(`Loaded file '${path}' integrity mismatch`);
+                throw this.croakOnLine(`#include ${e.message}`);
+            } else if (typeof e == "string") {
+                throw this.croakOnLine(e + "\n", false);
             }
             throw e;
         }
@@ -223,21 +273,28 @@ export class PPFileHandler {
         let [path, rest] = this.readUntilChar(text.substring(1), '"');
         const opath = path + "";
         if (path.startsWith("//")) {
-            path = this.preprocessor.config.params.lsl_includes.path + Path.SEP + ltrim(path, "/");
+            if (this.ishttp) throw this.croakOnLine("Http includes cannot use include dir absolute paths");
+            path = this.preprocessor.config.params.lsl_includes.dir + Path.SEP + ltrim(path, "/");
         } else if (path.startsWith("/")) {
-            if (this.filePath.toLowerCase().startsWith("https://")) {
+            if (this.ishttp) {
                 return [Path.dirname(this.filePath) + Path.SEP + path, opath, rest];
             }
             path = this.preprocessor.config.dirPath + Path.SEP + ltrim(path, "/");
         } else if (path.startsWith(".")) {
             path = Path.dirname(this.filePath) + Path.SEP + path;
-            if (this.filePath.toLowerCase().startsWith("https://")) {
+            if (this.ishttp) {
                 return [path, opath, rest];
             }
         } else if (path.startsWith("https://")) {
             return [path, opath, rest];
+        } else if (path.startsWith("http://")) {
+            throw this.croakOnLine("#include with non secure url");
         } else {
-            throw this.croakOnLine(`#inlcude path invalid`);
+            if (this.preprocessor.config.params.preprocessor.allowFSStyleAbsoluteIncludes) {
+                path = this.preprocessor.config.params.lsl_includes.dir + Path.SEP + path;
+            } else {
+                throw this.croakOnLine(`#inlcude path '${opath}' is invalid`);
+            }
         }
         return [Path.normalize(path), opath, rest];
     }
@@ -264,4 +321,8 @@ export class PPFileHandler {
 }
 
 
-class IntegrityError extends Error { }
+class IntegrityError extends Error {
+    constructor(file: string, expected: string, got: string) {
+        super(`Integrity Failure:\n${file}\nHashes to: '${got}'\nExpected  : '${expected}'`);
+    }
+}

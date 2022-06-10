@@ -1,6 +1,7 @@
 import { ltrim } from "../misc.ts";
 import type { Config } from "./config.ts";
 import {Path} from "../../deps.ts";
+import type { ConfDefault } from "./defaultConfig.ts";
 
 export class InstanceConfig {
     private _lslFile: string;
@@ -34,7 +35,7 @@ export class InstanceConfig {
     }
 
     get dirPath():string {
-        return `${this.params.projectsPath}${Path.SEP}${this.dir}${Path.SEP}`;
+        return `${this.params.projectsDir}${Path.SEP}${this.dir}${Path.SEP}`;
     }
 
     get project():string{
@@ -45,7 +46,7 @@ export class InstanceConfig {
         return this.file || "";
     }
 
-    toJSON() {
+    get def(): ConfInstance {
         return {
             params: this.params,
             lslFile: this.lslFile,
@@ -53,7 +54,11 @@ export class InstanceConfig {
             dirPath: this.dirPath,
             main: this.main,
             project: this.project,
-        }
+        };
+    }
+
+    toJSON() {
+        return this.def;
     }
 
     async load() {
@@ -127,4 +132,14 @@ export class InstanceConfig {
             }
         }
     }
+}
+
+
+export type ConfInstance = {
+    params: ConfDefault,
+    lslFile: string,
+    filePath: string,
+    dirPath: string,
+    main: string,
+    project: string,
 }

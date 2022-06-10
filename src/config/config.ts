@@ -1,6 +1,5 @@
 import { Path } from "../../deps.ts";
-import {defaultConfig, ConfDefault } from "./defaultConfig.ts";
-import {InstanceConfig} from "./instanceConfig.ts";
+import { defaultConfig, ConfDefault } from "./defaultConfig.ts";
 
 export class Config {
 
@@ -9,6 +8,8 @@ export class Config {
 
     private json = "";
     private _params:ConfDefault = defaultConfig();
+
+    private newConfig = false;
 
     constructor(homePath: string) {
         this.homePath = homePath;
@@ -22,7 +23,7 @@ export class Config {
         return this._params;
     }
 
-    private async writeConfigFile(content: sObj) {
+    private async writeConfigFile(content: ConfDefault) {
         await Deno.writeTextFile(this.path, JSON.stringify(content, null, 2));
     }
 
@@ -31,14 +32,21 @@ export class Config {
     }
 
     public async load() {
-        await this.loadJsonFromFile();
-        await this.parseJson();
-        const errors = this.loadMissingConfig(this._params, defaultConfig());
-        await this.writeConfigFile(this._params);
+        await this.loadConfigFile();
+        const errors = this.loadMissingConfig(this.params, defaultConfig());
+        await this.writeConfigFile(this.params);
         if (errors.length > 0) {
             throw `Config loaded with errors:\t` + errors.join("\n\t");
         }
+        if (this.newConfig) {
+            throw `New config written to '${this.path}'`;
+        }
         await this.validateConfig();
+    }
+
+    private async loadConfigFile() {
+        await this.loadJsonFromFile();
+        await this.parseJson();
     }
 
     private async loadJsonFromFile() {
@@ -46,8 +54,8 @@ export class Config {
             this.json = await Deno.readTextFile(this.path);
         } catch (e) {
             if (e instanceof Deno.errors.NotFound) {
-                await this.createDefaultConfig();
-                throw `Output config file to ${this.path}. Please read it and configure. Set active to true when ready.`;
+                this.newConfig = true;
+                this.json = "{}";
             } else throw e;
         }
     }
@@ -55,11 +63,12 @@ export class Config {
     private async parseJson() {
         try {
             this._params = JSON.parse(this.json);
-            if (typeof this._params !== "object" || this._params === null || this._params instanceof Array) {
+            if (typeof this.params !== "object" || this.params === null || this.params instanceof Array) {
+                this._params = defaultConfig();
                 throw "";
             }
         } catch (_e) {
-            await this.backupJsonAndCreateNewDefault();
+            await this.backupJson();
         }
     }
 
@@ -82,15 +91,23 @@ export class Config {
         if (this._params.active !== true) {
             errors.push(`Config at '${this.path}' is inactive.`);
         }
-        if(this.params.projectsPath.length < 1){
-            errors.push(`'projectsPath' is empty`);
+        if (this.params.projectsDir.length < 1) {
+            errors.push(`'projectsDir' is empty`);
         } else {
-            errors.push(...(await this.testDirectory(this.params.projectsPath,"projectsPath")));
+            errors.push(...(await this.testDirectory(this.params.projectsDir, "projectsDir")));
         }
-        if(this._params.lsl_includes.path.length < 1){
-            this.params.lsl_includes.path = this.params.projectsPath;
+        if (this._params.lsl_includes.dir.length < 1) {
+            this.params.lsl_includes.dir = this.params.projectsDir;
         }
-        errors.push(...(await this.testDirectory(this.params.lsl_includes.path,"lsl_includes.path")));
+        errors.push(...(await this.testDirectory(this.params.lsl_includes.dir, "lsl_includes.dir")));
+
+        if (this.params.preprocessor.httpCacheDir.length < 1) {
+            this.params.preprocessor.httpCacheDir = Path.dirname(Deno.execPath()) + Path.SEP + "cache";
+        }
+        const chacheError = await this.testDirectory(this.params.preprocessor.httpCacheDir, "preprocessor.httpCacheDir");
+        if (chacheError.length > 0) {
+            await Deno.mkdir(this.params.preprocessor.httpCacheDir, { recursive: true });
+        }
 
         if(errors.length){
             throw errors;
@@ -118,13 +135,13 @@ export class Config {
         return errors;
     }
 
-    private async backupJsonAndCreateNewDefault() {
+    private async backupJson() {
         await Deno.writeTextFile(this.path + ".bak", this.json);
-        await this.createDefaultConfig();
-        throw `Config at '${this.path}' is invalid.\nBacked up to '${this.path + ".bak"}'\nA fresh config has been created.`;
+        this.newConfig = true;
+        throw `Config at '${this.path}' is invalid.\nBacked up to '${this.path + ".bak"}'`;
     }
 }
 
-type sType = number | null | boolean | string | sType[] | sObj;
+type sType = number | null | boolean | string | sType[] | sObj | undefined;
 
 type sObj = { [k: string]: sType };

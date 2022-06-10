@@ -44,10 +44,16 @@ function allFinished(): Promise<void> {
 const config: Config = await loadConfig();
 
 async function loadConfig(): Promise<Config> {
+    try {
     const home = await getHomeDir();
     const config = new Config(home);
     await config.load();
     return config;
+    } catch (e) {
+        console.log(e);
+        prompt();
+        Deno.exit();
+    }
 }
 
 async function setupTcpListen(config: Config) {
@@ -149,9 +155,10 @@ try {
     await run();
 } catch (e) {
     if (e instanceof Array) {
-        e = "Errors:\n\t" + e.join("\n\t");
+        console.error("Errors:\n\t" + e.join("\n\t"));
+    } else {
+        console.error(e);
     }
-    console.error(e);
     prompt("\nPress ENTER to exit.");
     Deno.exit();
 }
