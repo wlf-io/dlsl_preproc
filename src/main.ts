@@ -1,8 +1,8 @@
-import { Path, isWindows } from "../deps.ts";
 import { Config } from "./config/config.ts";
 import { InstanceConfig } from "./config/instanceConfig.ts";
 import { PreProcessorContainer as PreProcContainer } from "./preprocessorContainer.ts";
 import { getHomeDir } from "./misc.ts";
+import { VERSION } from "./version.ts";
 
 let listen: Deno.Listener | null = null;
 
@@ -108,6 +108,7 @@ async function startProc(args: string[]) {
     procEnd(iconfig, p);
 }
 
+console.log("dlsl preprocessor " + VERSION);
 console.log(Deno.args.join(" "));
 
 async function connect() {
