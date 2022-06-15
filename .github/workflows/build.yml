@@ -5,6 +5,7 @@ on:
      - "**"
     tags:
      - "v*"
+     - "n*"
 
 jobs:
   build:
