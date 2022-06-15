@@ -4,6 +4,7 @@ import { sha1String } from "./misc.ts";
 import { Watcher } from "./watcher.ts";
 import { ExternalPreprocessor } from "./externalPreprocessor.ts";
 import { Preprocessor } from "./preprocessor/preprocessor.ts";
+import { VERSION } from "./version.ts";
 
 export class PreProcessorContainer {
     private filePath: string;
@@ -93,7 +94,7 @@ export class PreProcessorContainer {
     }
 
     get version(): string {
-        return "v0.0.1";
+        return VERSION;
     }
 
     public static getPreProc(config: InstanceConfig): iPreprocessor {
