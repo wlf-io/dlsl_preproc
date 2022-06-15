@@ -8,12 +8,8 @@ let listen: Deno.Listener | null = null;
 
 const running: { [k: string]: Deno.Process } = {};
 
+
 function runProc(config: InstanceConfig) {
-    if (isWindows) {
-        if (!Path.isAbsolute(config.params.editor.path)) {
-            throw "On windows your editor path must be absolute...";
-        }
-    }
     if (running[config.dirPath] === undefined) {
         running[config.dirPath] = Deno.run({
             cmd: [config.params.editor.path, ...config.params.editor.args, config.dirPath]
@@ -50,8 +46,12 @@ async function loadConfig(): Promise<Config> {
     await config.load();
     return config;
     } catch (e) {
-        console.log(e);
-        prompt();
+        if (e instanceof Array) {
+            console.log("\nConfig Errors:\n\t" + e.join("\n\t"));
+        } else {
+            console.log(e);
+        }
+        alert("\nConfig load failed....");
         Deno.exit();
     }
 }
@@ -138,7 +138,7 @@ async function connect() {
             return;
         }
         console.log(e);
-        prompt();
+        alert("\nConnection Error...");
         Deno.exit();
     }
 }
@@ -159,6 +159,6 @@ try {
     } else {
         console.error(e);
     }
-    prompt("\nPress ENTER to exit.");
+    alert("PreProc Error...");
     Deno.exit();
 }

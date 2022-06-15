@@ -1,12 +1,19 @@
 import { Preprocessor } from "./preprocessor.ts";
 import { Path } from "../../deps.ts";
 import { ltrim, rtrim, sha1String } from "../misc.ts";
+import { StringCharStream } from "./stringCharStream.ts";
 
 export class PPFileHandler {
     private filePath: string;
     private preprocessor: Preprocessor;
     private stack: string[];
     private integrity: string | null;
+
+    private defines: { [k: string]: string } = {};
+
+    private tags: { [k: string]: number } = {};
+
+    private gotos: { [k: string]: number } = {};
 
     private text = "";
 
@@ -38,14 +45,26 @@ export class PPFileHandler {
             this.integrity = null;
         }
 
-        if (!this.preprocessor.config.params.preprocessor.allowHttpInclude && this.ishttp) {
+        if (!this.config.allowHttpInclude && this.ishttp) {
             throw "Https includes are not enabled";
         }
+        if (this.ishttp) {
+            this.define("__SHORTFILE__", JSON.stringify(this.filePath));
+        } else {
+            this.define("__SHORTFILE__", JSON.stringify(Path.relative(this.preprocessor.config.dirPath, this.filePath)));
+        }
+        this.define("__FILE__", JSON.stringify(this.filePath));
     }
 
     private async getFileContent(): Promise<string> {
         if (this.ishttp) {
-            return await this.getUrlContent();
+            let cache = this.preprocessor.getCache(this.filePath);
+            if (cache) {
+                return cache;
+            }
+            cache = await this.getUrlContent();
+            this.preprocessor.cache(this.filePath, cache);
+            return cache;
         } else {
             this.preprocessor.addFile(this.filePath);
             return await Deno.readTextFile(this.filePath);
@@ -53,7 +72,7 @@ export class PPFileHandler {
     }
 
     private get httpCachePath(): string {
-        return this.preprocessor.config.params.preprocessor.httpCacheDir + Path.SEP + this.integrity;
+        return this.config.httpCacheDir + Path.SEP + this.integrity;
     }
 
     private async getUrlContent(): Promise<string> {
@@ -85,32 +104,159 @@ export class PPFileHandler {
         }
     }
 
+    private getDefine(key: string) {
+        return this.defines[key] ?? this.preprocessor.getDefine(key);
+    }
+
+    private define(key: string, value: string): void {
+        this.defines[key] = this.getDefine(value) ?? value;
+    }
+
+    private getLine(): string {
+        const line = this.lines[this.line];
+        this.line++;
+        this.define("__LINE__", this.line.toString());
+        return line;
+    }
+
+    private processLine(line: string): string {
+        const stream = new StringCharStream(line);
+        let block = "";
+        const blocks: string[] = [];
+        let out = "";
+        let stringInterp = false;
+        while (!stream.eof()) {
+            const char = stream.peek();
+            if (char.length != 1) {
+                throw "CHAR SHOULD ALWAYS BE 1";
+            }
+            if (char === '"') {
+                const def = this.getDefine(block);
+                if (def !== null) {
+                    block = def.toString();
+                }
+                out += block;
+                if (block.length) blocks.push(block);
+
+                block = stream.next();
+                block += stream.readQuoted();
+                block += stream.next();
+
+                if (stringInterp) {
+                    block = this.interpString(block);
+                }
+
+                if (block.length) blocks.push(block + "");
+                out += block;
+                block = "";
+            } else if (!this.isSymbolChar(char)) {
+                let white = false;
+                if (char == "@") {
+                    if (stream.peek(1) === '"') {
+                        stringInterp = true;
+                        stream.next();
+                        continue;
+                    }
+                } else if (this.isWhitespaceChar(char)) {
+                    white = true;
+                    block += stream.readWhileTrue(c => this.isWhitespaceChar(c));
+                } else {
+                    const def = this.getDefine(block);
+                    if (def !== null) {
+                        block = def.toString();
+                    }
+                }
+                if (block.length) blocks.push(block + "");
+                out += block;
+                block = "";
+                if (!white) {
+                    blocks.push(char);
+                    out += stream.next();
+                }
+            } else {
+                block += stream.next();
+            }
+            stringInterp = false;
+        }
+        const def = this.getDefine(block);
+        if (def !== null) {
+            block = def.toString();
+        }
+        if (block.length) blocks.push(block);
+        out += block;
+        return out;
+    }
+
+    private interpString(input: string): string {
+        const stream = new StringCharStream(input);
+        let interp = false;
+        const blocks: string[] = [];
+        let block = "";
+        while (!stream.eof()) {
+            const char = stream.peek();
+            if (char === "$" && stream.peek(1) === "{") {
+                if (interp) {
+                    throw this.croakOnLine("Nested string interpolation");
+                }
+                interp = true;
+                stream.next();
+                stream.next();
+                block += '"';
+                blocks.push(block);
+                block = "";
+            } else if (interp && char === "}") {
+                interp = false;
+                stream.next();
+                blocks.push(block);
+                block = '"';
+            } else {
+                block += stream.next();
+            }
+        }
+        blocks.push(block);
+        if (interp) throw this.croakOnLine("Unterminated string interpolation value");
+        return this.processLine("(string)[" + blocks.filter(b => b !== '""').join(", ") + "]");
+    }
+
+    private isSymbolChar(char: string) {
+        return (/^[0-9A-Z_]{1}$/gi).test(char);
+    }
+
+    private isWhitespaceChar(char: string) {
+        return (/^[\r\n\t ]{1}$/gi).test(char);
+    }
+
     async process(): Promise<string> {
         this.line = 0;
         const output: string[] = [];
 
         this.text = await this.getFileContent();
 
-
-
         this.lines = this.text.split("\n");
 
         while (this.line < this.lines.length) {
-            let line = this.lines[this.line];
-            this.line++;
-            this.preprocessor.define("__LINE__", this.line);
+            const line = this.getLine();
+            const proc = ltrim(line).toLowerCase();
+            if (proc.startsWith("#tag") || proc.startsWith("#label")) {
+                await this.handleCmd(ltrim(line).substring(1), line);
+            }
+        }
+
+        this.line = 0;
+
+        while (this.line < this.lines.length) {
+            let line = this.getLine();
             const result = [];
 
             if (ltrim(line).startsWith("#")) {
-                while(rtrim(line).endsWith("\\")){
-                    line += "\n" + this.lines[this.line];
-                    this.line++;
+                while (rtrim(line).endsWith("\\")) {
+                    line += "\n" + this.getLine();
                 }
-                const proc = ltrim(line.substring(1));
-                const cmdRes = await this.handleCmd(proc,line);
+                const proc = ltrim(line).substring(1);
+                const cmdRes = await this.handleCmd(proc, line);
                 result.push(...cmdRes);
             } else {
-                result.push(line);
+                result.push(this.processLine(line));
             }
 
             output.push(...result);
@@ -119,9 +265,9 @@ export class PPFileHandler {
         return output.join("\n");
     }
 
-    private async handleCmd(line: string, raw:string): Promise<string[]> {
+    private async handleCmd(line: string, raw: string): Promise<string[]> {
 
-        if(!line.startsWith(this.preprocessor.config.params.preprocessor.cmdPrefix)){
+        if (!line.startsWith(this.config.cmdPrefix)) {
             return [raw];
         }
 
@@ -131,7 +277,7 @@ export class PPFileHandler {
         const arg1 = () => {
             let arg = "";
             while (arg == "" && parts.length) {
-                arg = parts.shift() ?? "";
+                arg = (parts.shift() ?? "").trim();
             }
             return arg;
         };
@@ -145,10 +291,41 @@ export class PPFileHandler {
                     throw this.croakOnLine(`#define invalid`);
                 }
                 break;
+            case "increment": {
+                const arg = ltrim(arg1(), "_");
+                const def = this.getDefine(arg);
+                if (def == null) throw this.croakOnLine(`Cannot #${cmd} undefined variable`);
+                if (parseInt(def).toString() !== def) throw this.croakOnLine(`Cannot #${cmd} non numeric variable`);
+                this.preprocessor.define(arg, (parseInt(def) + (parseInt(parts.join(" ").trim() || "1") || 1)).toString());
+                return [];
+            }
+            case "decrement": {
+                const arg = ltrim(arg1(), "_");
+                const def = this.getDefine(arg);
+                if (def == null) throw this.croakOnLine(`Cannot #${cmd} undefined variable`);
+                if (parseInt(def).toString() !== def) throw this.croakOnLine(`Cannot #${cmd} non numeric variable`);
+                this.preprocessor.define(arg, (parseInt(def) - (parseInt(parts.join(" ").trim() || "1") || 1)).toString());
+                return [];
+            }
+            case "tag":
+            case "label": {
+                const arg = arg1();
+                if (arg.length > 0) {
+                    this.tags[arg] = this.line;
+                } else {
+                    throw this.croakOnLine(`#${cmd} is missing label`);
+                }
+                return [];
+            }
+            case "goto": {
+                const arg = arg1();
+                this.goto(arg, cmd);
+                return [];
+            }
             case "ifdef": {
                 const arg = arg1();
                 if (arg == "") throw this.croakOnLine(`name for #${cmd} empty`);
-                if (this.preprocessor.getDefine(arg) === null) {
+                if (this.getDefine(arg) === null) {
                     this.advanceUntilConditionalEnd();
                 }
                 return [];
@@ -156,8 +333,24 @@ export class PPFileHandler {
             case "ifndef": {
                 const arg = arg1();
                 if (arg == "") throw this.croakOnLine(`name for #${cmd} empty`);
-                if (this.preprocessor.getDefine(arg) !== null) {
+                if (this.getDefine(arg) !== null) {
                     this.advanceUntilConditionalEnd();
+                }
+                return [];
+            }
+            case "if": {
+                const cond = parts.join(" ").trim();
+                const stream = new StringCharStream(cond.trim());
+                if (!this.evaluateCond(stream)) {
+                    this.advanceUntilConditionalEnd();
+                }
+                return [];
+            }
+            case "ifgoto": {
+                const cond = parts.join(" ").trim();
+                const stream = new StringCharStream(cond.trim());
+                if (this.evaluateCond(stream)) {
+                    this.goto(stream.readToEnd().trim(), cmd);
                 }
                 return [];
             }
@@ -179,7 +372,11 @@ export class PPFileHandler {
             case "error":
                 throw this.croakOnLine(line);
             case "warning":
-                console.warn(this.croakOnLine(line));
+            case "warn":
+                console.warn(this.croakOnLine(this.processLine(line)));
+                return [];
+            case "log":
+                console.log(this.croakOnLine(this.processLine(line)));
                 return [];
             case "config":
             case "conf": {
@@ -192,13 +389,12 @@ export class PPFileHandler {
                 }
                 return [];
             }
-            case "if":
             case "elif":
             case "elseif":
                 throw this.croakOnLine(`#${cmd} not implemented`);
             default: {
-                const pp = this.preprocessor.config.params.preprocessor.passThroughPrefix;
-                if(pp.length){
+                const pp = this.config.passThroughPrefix;
+                if (pp.length) {
                     if (cmd?.startsWith(pp)) {
                         const ppi = raw.indexOf(pp);
                         raw = raw.substring(0, ppi) + raw.substring(ppi + pp.length);
@@ -211,12 +407,76 @@ export class PPFileHandler {
         return [];
     }
 
+    private goto(tag: string, cmd: string) {
+        if (tag.length > 0) {
+            let line: number = parseInt(tag) || 0;
+            if (line < 1) line = this.tags[tag] ?? 0;
+            if (line < 1) line = parseInt(this.getDefine(tag) ?? "0") || 0;
+            if (line < 1) {
+                throw this.croakOnLine(`#${cmd} references unkown tag / line '${tag}'`);
+            } else {
+                const count = this.gotos[line.toString()] ?? 0;
+                if (count > this.config.maxGoTo) {
+                    throw this.croakOnLine(`Max goto repeats reached [${this.config.maxGoTo}], cannot goto line ${line} again.`);
+                }
+                this.gotos[line.toString()] = count + 1;
+                this.line = line - 1;
+            }
+        } else {
+            throw this.croakOnLine(`#${cmd} is missing label`);
+        }
+    }
+
+    private get config() {
+        return this.preprocessor.config.params.preprocessor;
+    }
+
+    private evaluateCond(stream: StringCharStream): boolean {
+        let left = stream.readWhileTrue(c => this.isSymbolChar(c));
+        const mid = stream.readWhileTrue(c => !this.isSymbolChar(c)).trim();
+        let right = stream.readWhileTrue(c => this.isSymbolChar(c));
+        if (left === "" || right === "" || mid === "") {
+            throw this.croakOnLine(`invalid condition`);
+        }
+        left = this.getDefine(left) ?? left;
+        right = this.getDefine(left) ?? right;
+        const lnum = parseInt(left);
+        const rnum = parseInt(right);
+        const nums = lnum.toString() === left && rnum.toString() === right;
+        const notnums = this.croakOnLine(`Numerical comparison with non numerical values`);
+        switch (mid) {
+            case "==":
+                return left === right;
+            case "!=":
+                return left !== right;
+            case "<":
+                if (!nums) throw notnums;
+                return lnum < rnum;
+            case "<=":
+                if (!nums) throw notnums;
+                return lnum <= rnum;
+            case ">":
+                if (!nums) throw notnums;
+                return lnum > rnum;
+            case ">=":
+                if (!nums) throw notnums;
+                return lnum >= rnum;
+            case "%":
+                if (!nums) throw notnums;
+                return (lnum % rnum) != 0;
+            case "!%":
+                if (!nums) throw notnums;
+                return (lnum % rnum) == 0;
+            default:
+                throw this.croakOnLine(`Unrecognised comparator '${mid}'`);
+        }
+    }
+
     private advanceUntilConditionalEnd() {
         let depth = 1;
         let line = "";
         while (this.line < this.lines.length) {
-            line = this.lines[this.line];
-            this.line++;
+            line = this.getLine();
             if (ltrim(line).startsWith("#")) {
                 const cmd = (line.split(" ")[0] ?? "").toLowerCase();
                 if (cmd.startsWith("#if")) {
@@ -233,6 +493,10 @@ export class PPFileHandler {
 
     private logLine(text: string) {
         console.log(`${this.onLine()} ${text}`);
+    }
+
+    private croakOnLineAndColumn(croak: string, column: number) {
+        return this.croakOnLine(croak) + ` column ${column}`;
     }
 
     private croakOnLine(croak: string, trim = true): string {
@@ -290,7 +554,7 @@ export class PPFileHandler {
         } else if (path.startsWith("http://")) {
             throw this.croakOnLine("#include with non secure url");
         } else {
-            if (this.preprocessor.config.params.preprocessor.allowFSStyleAbsoluteIncludes) {
+            if (this.config.allowFSStyleAbsoluteIncludes) {
                 path = this.preprocessor.config.params.lsl_includes.dir + Path.SEP + path;
             } else {
                 throw this.croakOnLine(`#inlcude path '${opath}' is invalid`);
@@ -302,7 +566,7 @@ export class PPFileHandler {
     private readUntilChar(subject: string, char: string, escape = "\\") {
         let out = "";
         let escaped = false;
-        while(subject.length) {
+        while (subject.length) {
             const c = subject.charAt(0);
             subject = subject.substring(1);
             if (escaped) {
@@ -316,7 +580,7 @@ export class PPFileHandler {
             }
             out += c;
         }
-        return [out,subject];
+        return [out, subject];
     }
 }
 

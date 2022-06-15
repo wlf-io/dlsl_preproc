@@ -32,10 +32,12 @@ const defaultConf: ConfDefault = {
         allowHttpInclude: false,
         httpCacheDir: "",
         allowFSStyleAbsoluteIncludes: false,
+        maxGoTo: 1000,
         __comment: {
             cmdPrefix : "A prefix for all preproc commands, e.g. if set to 'd_' then the include command would be #d_include, all non prefixed commands would be passed through to the output",
             passThroughPrefix : "A prefix to explicitly pass through it will be trimmed off, incase you use NO cmdPrefix but want to pass something through, e.g. if set to 'f_' then using #f_include will be passed to the output as #include",
             allowFSStyleAbsoluteIncludes: "Allow includes without '//' at the start to resolve to paths relative to 'lsl_includes.dir' like in firestorm",
+            maxGoTo: "The maximum number of times you can goto a specific line (set to 0 to disable)",
         },
         override: {
             enabled: false,
@@ -78,6 +80,7 @@ export type ConfDefault = {
         httpCacheDir: string;
         override: ConfPreprocessorOverride;
         allowFSStyleAbsoluteIncludes: boolean;
+        maxGoTo: number;
         __comment?: uComment;
     };
     __comment?: uComment;

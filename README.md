@@ -13,40 +13,71 @@ To build this yourself you need:
  - `make` installed (optional)
  - run `make build-linux` or `make build-win`
 
-If you do not have `make`` installed you can run the deno compile command directly, bu looking inside the makefile.
-I plan to move this to a deno config file at some point.
+If you do not have `make` installed you can run the deno compile command directly, (it can be found in the makefile).
 
 Vaguely this project needs splitting into two parts, the preprocessor and the firestorm compatability layer.
 
 # Features
 
  - COMMANDS!!! (obviously, see the list below)
+ - String interpolation
  - Run on changes to any files in the include tree
  - Handles multiple scripts being open
- - command passthrough (allow commands to be passed through to the firestorm preprocessor) see config
+ - command passthrough
+ - Let dlsl_preproc only handle file watching and dealing with firestorm, and overide the actual preprocessing to anything you want.
 
 
-# Currenlty suported commands
+## Currently suported commands
 
  - #include
- - #define `*`
+ - #define
  - #undef (#undefine)
  - #ifdef
  - #ifndef
+ - #if
  - #else
  - #endif (#fi)
  - #warning
  - #error
-
-`*` Partial support
+ - #increment
+ - #decremrent
+ - #goto
+ - #label (#tag)
+ - #ifgoto
+ - #config
 
 Commands can be multiplined using a trailing `\`
 
-# Planned Commands
- - finish #define support
- - #if
+## Planned Commands
  - #elif (#elseif)
-- Let dlsl_preproc only handle file watching and dealing with firestorm, and overide the actual preprocessing to anything you want.
+
+# String Interpolation
+
+Prefixing a string with the `@` symbol will allow the string to be interpolated.
+
+```c
+integer a = 1;
+llOwnerSay(@"The variable a is ${a}");
+```
+
+Will be converted to
+
+```c
+integer a = 1;
+llOwnerSay((string)["The variable a is ", a]);
+```
+
+# Command Passthrough
+
+This allows for commands to be passed through to the firestorm preprocessor if desired
+
+This is done by using the configured command prefix (defaults to : `#f_`)
+
+```c
+#define foo bar   // This define would be handled by the dlsl preprocessor
+#f_define foo bar   // This would be converted to #define foo bar and passed into output for another preprocessor (firestorm)
+```
+
 
 # Commands
 
@@ -84,7 +115,7 @@ A global includes directory can also be set in the config file parameter `lsl_in
 Global includes can be referenced with `//`
 e.g
 ```c
-#include "//global_defines.lsl" //Would include the file found at <lsl_inluders.dir>/global_defines.lsl
+#include "//global_defines.lsl" //Would include the file found at <lsl_inludes.dir>/global_defines.lsl
 ```
 
 ### Http includes
@@ -117,21 +148,19 @@ Includes with integrity strings will also be cached in the derectory specified i
 
 ## #define
 
-**PARTIAL SUPPORT**
-
-Currently define is partially supported you can define things and set a value, but it will not be used for anything other than `#ifdef` and `#ifndef` checks.
-
-Support for defined variabels being inserted into the code is being worked on
+Used to define variables for `#ifdef` `#ifndef` checks and to replace items in code.
 
 ```c
-#define BOB "bob" // deifns the var BOB and sets it to '"BOB"'
+#define BOB "bob" // defines the var BOB and sets it to '"BOB"'
 ```
+
+This does not currently support the function like defininf of the firestorm preprocessor
 
 ## #undef (#undefine)
 
 Allows you to unset a defined variable
 ```c
-#undef BOB  //Clears teh variable bob if it was set
+#undef BOB  //Clears the variable bob if it was set
 ```
 
 ## #ifdef - #ifndef - #else
@@ -150,11 +179,88 @@ integer thing = FALSE;
 
 Statements can be nested
 
+## #if
+
+Conditional statement to skip over or include code works with `#else` and `#endif`
+
+Supported operators
+ - ==
+ - !=
+ - &gt;
+ - &gt;=
+ - &lt;
+ - &lt;=
+ - %
+ - !%
+
+```c
+#define a 1
+#if a == 1
+// line to include
+#endif
+```
+
+Whitespace in a conditional is ignored, i.e all the below are valid
+```c
+#if a == 1
+#if a==1
+#if a     ==1
+#if a     ==1
+```
+It currently does not parse quited strings though, so `a == "text"` would error.
+
+Numerical comparisons `>`, `<`, `%` etc will only work if left and right items are numric.
+
 ## #warning
 Will cause the preprocessor to print the text after the command to the console.
 
 ## #error
 Will cause the preprocessor to error and print the text after the command to the console.
+
+## #increment #decremrent
+Will increment or decrement a numeric define, a second argument can be used to use a value other than 1
+
+```c
+#define a 0        // a = 0
+#increment a       // a = 1
+#decrement a       // a = 0
+#increment a 5     // a = 5
+#decrement a 10    // a = -5
+```
+
+## #goto #label
+
+Can be used to goto a line / label
+
+The following examples would all go to line 1 (and loop infinitley)
+
+```c
+1| 
+2|#goto 1
+
+1|
+2|#define a 1
+3|
+4|#goto a
+
+1|#label start
+2|
+3|#goto start
+```
+
+## #ifgoto
+
+Same as below but on a single line
+```
+#if a < 1
+#goto label
+#endif
+```
+
+`#ifgoto` example
+```c
+#ifgoto a<1 label
+```
 
 # Config
 

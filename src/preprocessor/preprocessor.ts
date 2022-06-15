@@ -8,7 +8,9 @@ export class Preprocessor implements iPreprocessor {
 
     private rconf: ConfInstance;
 
-    private defines : {[k:string]:string|number|null} = {};
+    private _cache: { [k: string]: string } = {};
+
+    private defines: { [k: string]: string | null } = {};
 
     private files: string[] = [];
 
@@ -27,6 +29,7 @@ export class Preprocessor implements iPreprocessor {
         this.defines = {};
         this.defaultDefines();
         this.files = [];
+        this._cache = {};
     }
     
     async processFile(filePath: string) : Promise<string> {
@@ -35,16 +38,24 @@ export class Preprocessor implements iPreprocessor {
         return await fileHandler.process();
     }
 
+    cache(key: string, value: string): void {
+        this._cache[key] = value;
+    }
+
+    getCache(key: string): string | null {
+        return this._cache[key] ?? null;
+    }
+
     getUsedFiles(): string[] {
         return [...this.files];
     }
 
-    getDefine(key:string) : string|number|null {
+    getDefine(key: string): string | null {
         return this.defines[key] ?? null;
     }
 
-    define(key:string, value:string|number) : void {
-        this.defines[key] = value;
+    define(key: string, value: string): void {
+        this.defines[key] = this.getDefine(value) ?? value;
     }
 
     undefine(key:string) : void {
@@ -63,7 +74,7 @@ export class Preprocessor implements iPreprocessor {
     }
 
     private defaultDefines(){
-        this.define("__UNIXTIME__",Math.floor(Date.now() * 0.001));
+        this.define("__UNIXTIME__", Math.floor(Date.now() * 0.001).toString());
     }
 }
 

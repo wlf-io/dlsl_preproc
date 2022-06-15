@@ -1,4 +1,4 @@
-import { Path } from "../../deps.ts";
+import { Path, isWindows } from "../../deps.ts";
 import { defaultConfig, ConfDefault } from "./defaultConfig.ts";
 
 export class Config {
@@ -109,6 +109,11 @@ export class Config {
         const chacheError = await this.testDirectory(this.params.preprocessor.httpCacheDir, "preprocessor.httpCacheDir");
         if (chacheError.length > 0) {
             await Deno.mkdir(this.params.preprocessor.httpCacheDir, { recursive: true });
+        }
+        if (isWindows) {
+            if (!Path.isAbsolute(this.params.editor.path)) {
+                errors.push("On windows your editor path must be absolute...");
+            }
         }
 
         if(errors.length){

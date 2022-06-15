@@ -1,6 +1,6 @@
 import type { InstanceConfig } from "./config/instanceConfig.ts";
 import type { iPreprocessor } from "./interfaces.d.ts";
-import { sha256String, sha1String } from "./misc.ts";
+import { sha1String } from "./misc.ts";
 import { Watcher } from "./watcher.ts";
 import { ExternalPreprocessor } from "./externalPreprocessor.ts";
 import { Preprocessor } from "./preprocessor/preprocessor.ts";
@@ -74,6 +74,7 @@ export class PreProcessorContainer {
             }
             this.lastHash = hashHex;
             const content = [
+                `//#dlsl_comment Preprocesset with ${this.version} of dlsl preprocessor`,
                 `//#dlsl_dir ${this.config.project}`,
                 `//#dlsl_file ${this.config.main}`,
                 `//#dlsl_hash ${hashHex}`,
@@ -91,7 +92,9 @@ export class PreProcessorContainer {
         }
     }
 
-
+    get version(): string {
+        return "v0.0.1";
+    }
 
     public static getPreProc(config: InstanceConfig): iPreprocessor {
         if (config.params.preprocessor.override.enabled) {
