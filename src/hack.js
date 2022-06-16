@@ -4,11 +4,11 @@ export function setObjValueByPath(path, value, schema) {
     let elem
     for (let i = 0; i < len - 1; i++) {
         elem = pList[i];
-        if (!schema.hasOwnProperty(elem)) throw `invalid path '${path}'`;
+        if (!Object.prototype.hasOwnProperty.call(schema, elem)) throw `invalid path '${path}'`;
         schema = schema[elem];
     }
     elem = pList[len - 1];
-    if (!schema.hasOwnProperty(elem)) throw `invalid path '${path}'`;
+    if (!Object.prototype.hasOwnProperty.call(schema, elem)) throw `invalid path '${path}'`;
     if (typeof schema[elem] !== typeof value) {
         throw `value mismatch`;
     }

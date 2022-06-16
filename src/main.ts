@@ -44,7 +44,7 @@ function updateCheck() {
                 }
             }
         })
-        .catch(e => { });
+        .catch(_e => { });
 }
 
 let end: (() => void) | null = null;
