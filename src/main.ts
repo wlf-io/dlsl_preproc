@@ -30,7 +30,7 @@ function procEnd(config: InstanceConfig, proc: Deno.Process) {
 }
 
 function updateCheck() {
-    if (VERSION == "develop") return;
+    if (VERSION == ("develop" + "")) return;
     const repoUrl = "https://github.com/wlf-io/dlsl_preproc".toLowerCase();
     fetch(repoUrl + "/releases/latest/", { redirect: "manual" })
         .then(r => {
