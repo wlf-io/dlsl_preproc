@@ -29,6 +29,24 @@ function procEnd(config: InstanceConfig, proc: Deno.Process) {
     }
 }
 
+function updateCheck() {
+    if (VERSION == "develop") return;
+    const repoUrl = "https://github.com/wlf-io/dlsl_preproc".toLowerCase();
+    fetch(repoUrl + "/releases/latest/", { redirect: "manual" })
+        .then(r => {
+            if (r.status === 302) {
+                const loc = (r.headers.get("location") ?? "").toLowerCase().trim();
+                if (loc.startsWith(repoUrl + "/releases/tag/v")) {
+                    const end = (loc.split("/").pop() ?? "").toLowerCase();
+                    if (end !== VERSION) {
+                        console.log("New Version Available: " + loc);
+                    }
+                }
+            }
+        })
+        .catch(e => { });
+}
+
 let end: (() => void) | null = null;
 
 function allFinished(): Promise<void> {
@@ -41,10 +59,10 @@ const config: Config = await loadConfig();
 
 async function loadConfig(): Promise<Config> {
     try {
-    const home = await getHomeDir();
-    const config = new Config(home);
-    await config.load();
-    return config;
+        const home = await getHomeDir();
+        const config = new Config(home);
+        await config.load();
+        return config;
     } catch (e) {
         if (e instanceof Array) {
             console.log("\nConfig Errors:\n\t" + e.join("\n\t"));
@@ -94,8 +112,15 @@ async function init() {
     listen?.close();
 }
 
+const files: string[] = [];
+
 async function startProc(args: string[]) {
     const filePath = args[0];
+    if (files.includes(filePath)) {
+        console.log("Already Watching file");
+        return;
+    }
+    files.push(filePath);
     const iconfig = new InstanceConfig(config, filePath);
     await iconfig.load();
     // console.log(JSON.parse(JSON.stringify(iconfig)));
@@ -135,7 +160,6 @@ async function connect() {
         }
     } catch (e) {
         if (e instanceof Deno.errors.ConnectionRefused) {
-            console.log("CON REFUSED");
             return;
         }
         console.log(e);
@@ -147,6 +171,7 @@ async function connect() {
 
 async function run() {
     await connect();
+    updateCheck();
     await init();
     console.log("Finished");
 

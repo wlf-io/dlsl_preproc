@@ -75,7 +75,7 @@ export class PreProcessorContainer {
             }
             this.lastHash = hashHex;
             const content = [
-                `//#dlsl_comment Preprocesset with ${this.version} of dlsl preprocessor`,
+                `//#dlsl_comment Preprocessed with dlsl preprocessor ${this.version}`,
                 `//#dlsl_dir ${this.config.project}`,
                 `//#dlsl_file ${this.config.main}`,
                 `//#dlsl_hash ${hashHex}`,
