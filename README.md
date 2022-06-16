@@ -1,6 +1,4 @@
-[![Build](https://github.com/wlf-io/dlsl_preproc/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/wlf-io/dlsl_preproc/actions/workflows/build.yml)
-
-# dlsl_preproc
+# dlsl_preproc [![Build](https://github.com/wlf-io/dlsl_preproc/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/wlf-io/dlsl_preproc/actions/workflows/build.yml)
 A pre processor for LSL written in typescript using [Deno](https://deno.land)
 
 This was mostly a Proof of Concept that has gotten a little out of hand. And thus is poorly implemented IMO, and needs reworking.
