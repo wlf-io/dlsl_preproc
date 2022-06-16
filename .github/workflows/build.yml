@@ -22,11 +22,13 @@ jobs:
       - name: build
         run: deno task build
       - name: Upload artifact
+        if: "!contains(github.ref, 'tags/v')"
         uses: actions/upload-artifact@v3
         with:
           name: dlsl_preproc.exe
           path: bin/dlsl_preproc.exe
       - name: Upload artifact
+        if: "!contains(github.ref, 'tags/v')"
         uses: actions/upload-artifact@v3
         with:
           name: dlsl_preproc
