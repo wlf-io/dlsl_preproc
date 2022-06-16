@@ -10,10 +10,7 @@ Then configuring your own editor in the config file `<user home>/.deno_lsl_prepr
 To build this yourself you need:
  - [Deno](https://deno.land) installed
  - clone this repo
- - `make` installed (optional)
- - run `make build-linux` or `make build-win`
-
-If you do not have `make` installed you can run the deno compile command directly, (it can be found in the makefile).
+ - run `deno task build-linux` or `deno task build-win` (or `deno task build` for both)
 
 Vaguely this project needs splitting into two parts, the preprocessor and the firestorm compatability layer.
 
