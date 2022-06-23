@@ -8,7 +8,7 @@ It is currenlty designed to be used with firestorm by setting the executable as 
 Then configuring your own editor in the config file `<user home>/.deno_lsl_preproc.json`
 
 To build this yourself you need:
- - [Deno](https://deno.land) installed
+ - [Deno](https://deno.land) installed  (developed with v1.21.1)
  - clone this repo
  - run `deno task build-linux` or `deno task build-win` (or `deno task build` for both)
 

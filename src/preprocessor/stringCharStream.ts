@@ -44,9 +44,11 @@ export class StringCharStream {
     }
 
     public readQuoted(quote = '"', escape = "\\"): string {
-        let escaped = false;
+        let escaped = true;
+        let end = false;
         const check = function (char: string) {
-            if (char == quote && !escaped) return false;
+            if (end) return false;
+            if (char == quote && !escaped) end = true;
             if (char == escape && !escaped) escaped = true;
             else escaped = false;
             return true;

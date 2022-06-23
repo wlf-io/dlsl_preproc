@@ -14,10 +14,21 @@ export class Preprocessor implements iPreprocessor {
 
     private files: string[] = [];
 
+    private allwaysInclude = "";
+
     constructor(config: InstanceConfig) {
         this._config = config;
         this.defaultDefines();
         this.rconf = JSON.parse(JSON.stringify(this._config.def));
+
+        this.allwaysInclude = this.config.params.lsl_includes.globalInclude;
+        if (this.allwaysInclude.length) {
+            while (!this.allwaysInclude.startsWith("//")) {
+                this.allwaysInclude = "/" + this.allwaysInclude;
+            }
+            this.allwaysInclude = `#include "${this.allwaysInclude}"`;
+        }
+
     }
 
     get config(): ConfInstance {
@@ -35,6 +46,7 @@ export class Preprocessor implements iPreprocessor {
     async processFile(filePath: string) : Promise<string> {
         this.reset();
         const fileHandler = new PPFileHandler(filePath,this,[]);
+        fileHandler.prefix = this.allwaysInclude;
         return await fileHandler.process();
     }
 
@@ -55,6 +67,7 @@ export class Preprocessor implements iPreprocessor {
     }
 
     define(key: string, value: string): void {
+        // console.log("Define:", key, value);
         this.defines[key] = this.getDefine(value) ?? value;
     }
 

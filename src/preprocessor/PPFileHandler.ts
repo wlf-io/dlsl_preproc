@@ -25,6 +25,10 @@ export class PPFileHandler {
 
     public sha = "";
 
+    private _prefix = "";
+
+    private shortFilePath = "";
+
     constructor(filePath: string, preprocessor: Preprocessor, stack: string[], integrity: string | null = null) {
         this.filePath = filePath;
         this.ishttp = this.filePath.toLowerCase().startsWith("https://");
@@ -49,11 +53,60 @@ export class PPFileHandler {
             throw "Https includes are not enabled";
         }
         if (this.ishttp) {
-            this.define("__SHORTFILE__", JSON.stringify(this.filePath));
+            this.shortFilePath = this.filePath;
         } else {
-            this.define("__SHORTFILE__", JSON.stringify(Path.relative(this.preprocessor.config.dirPath, this.filePath)));
+            this.shortFilePath = Path.relative(this.preprocessor.config.dirPath, this.filePath);
         }
+
+        this.define("__SHORTFILE__", JSON.stringify(this.shortFilePath));
         this.define("__FILE__", JSON.stringify(this.filePath));
+    }
+
+    async process(): Promise<string> {
+        this.line = 0;
+        const output: string[] = [];
+
+        await this.loadContent();
+
+        this.lines = this.text.split("\n");
+
+        while (this.line < this.lines.length) {
+            const line = this.getLine();
+            const proc = ltrim(line).toLowerCase();
+            if (proc.startsWith("#tag") || proc.startsWith("#label")) {
+                await this.handleCmd(ltrim(line).substring(1), line);
+            }
+        }
+
+        this.line = 0;
+
+        while (this.line < this.lines.length) {
+            let line = this.getLine();
+            const result = [];
+
+            if (ltrim(line).startsWith("#")) {
+                while (rtrim(line).endsWith("\\")) {
+                    line += "\n" + this.getLine();
+                }
+                const proc = ltrim(line).substring(1);
+                const cmdRes = await this.handleCmd(proc, line);
+                result.push(...cmdRes);
+            } else {
+                result.push(this.processLine(line));
+            }
+
+            output.push(...result);
+        }
+
+        return output.join("\n");
+    }
+
+    set prefix(prefix: string) {
+        this._prefix = prefix + (prefix.endsWith("\n") ? "" : "\n");
+    }
+
+    get prefix(): string {
+        return this._prefix;
     }
 
     private async getFileContent(): Promise<string> {
@@ -102,6 +155,7 @@ export class PPFileHandler {
                 await Deno.writeTextFile(this.httpCachePath, this.text);
             }
         }
+        this.text = this.prefix + this.text;
     }
 
     private getDefine(key: string) {
@@ -119,10 +173,20 @@ export class PPFileHandler {
         return line;
     }
 
-    private processLine(line: string): string {
+    private processLine(line: string, off = 0): string {
+        let out = this.doProcessLine(line, off);
+        let iter = 1;
+        while (out !== line) {
+            line = out;
+            ++iter;
+            // console.log(`${this.line} iteration ${iter}`);
+            out = this.doProcessLine(out, off);
+        }
+        return out;
+    }
+
+    private doProcessLine(line: string, off = 0): string {
         const stream = new StringCharStream(line);
-        let block = "";
-        const blocks: string[] = [];
         let out = "";
         let stringInterp = false;
         while (!stream.eof()) {
@@ -130,64 +194,39 @@ export class PPFileHandler {
             if (char.length != 1) {
                 throw "CHAR SHOULD ALWAYS BE 1";
             }
-            if (char === '"') {
+            if (this.isSymbolChar(char)) {
+                const block = stream.readWhileTrue(c => this.isSymbolChar(c));
                 const def = this.getDefine(block);
-                if (def !== null) {
-                    block = def.toString();
+                // console.log(`[${this.shortFilePath} (${this.line}:${stream.position + off})]`, block, def);
+                if (def) {
+                    out += def;
+                } else {
+                    out += block;
                 }
-                out += block;
-                if (block.length) blocks.push(block);
-
-                block = stream.next();
-                block += stream.readQuoted();
-                block += stream.next();
-
+            } else if (char === '"') {
+                const pos = stream.position;
+                const block = stream.readQuoted();
                 if (stringInterp) {
-                    block = this.interpString(block);
+                    out += this.interpString(block, pos);
+                } else {
+                    out += block;
                 }
-
-                if (block.length) blocks.push(block + "");
-                out += block;
-                block = "";
-            } else if (!this.isSymbolChar(char)) {
-                let white = false;
+            } else {
                 if (char == "@") {
                     if (stream.peek(1) === '"') {
                         stringInterp = true;
                         stream.next();
                         continue;
                     }
-                } else if (this.isWhitespaceChar(char)) {
-                    white = true;
-                    block += stream.readWhileTrue(c => this.isWhitespaceChar(c));
-                } else {
-                    const def = this.getDefine(block);
-                    if (def !== null) {
-                        block = def.toString();
-                    }
                 }
-                if (block.length) blocks.push(block + "");
-                out += block;
-                block = "";
-                if (!white) {
-                    blocks.push(char);
-                    out += stream.next();
-                }
-            } else {
-                block += stream.next();
+                out += stream.readWhileTrue(c => !this.isSymbolChar(c) && c !== '"' && c !== "@");
             }
             stringInterp = false;
         }
-        const def = this.getDefine(block);
-        if (def !== null) {
-            block = def.toString();
-        }
-        if (block.length) blocks.push(block);
-        out += block;
         return out;
     }
 
-    private interpString(input: string): string {
+    private interpString(input: string, off: number): string {
         const stream = new StringCharStream(input);
         let interp = false;
         const blocks: string[] = [];
@@ -215,7 +254,7 @@ export class PPFileHandler {
         }
         blocks.push(block);
         if (interp) throw this.croakOnLine("Unterminated string interpolation value");
-        return this.processLine("(string)[" + blocks.filter(b => b !== '""').join(", ") + "]");
+        return this.processLine("(string)[" + blocks.filter(b => b !== '""').join(", ") + "]", off);
     }
 
     private isSymbolChar(char: string) {
@@ -224,45 +263,6 @@ export class PPFileHandler {
 
     private isWhitespaceChar(char: string) {
         return (/^[\r\n\t ]{1}$/gi).test(char);
-    }
-
-    async process(): Promise<string> {
-        this.line = 0;
-        const output: string[] = [];
-
-        this.text = await this.getFileContent();
-
-        this.lines = this.text.split("\n");
-
-        while (this.line < this.lines.length) {
-            const line = this.getLine();
-            const proc = ltrim(line).toLowerCase();
-            if (proc.startsWith("#tag") || proc.startsWith("#label")) {
-                await this.handleCmd(ltrim(line).substring(1), line);
-            }
-        }
-
-        this.line = 0;
-
-        while (this.line < this.lines.length) {
-            let line = this.getLine();
-            const result = [];
-
-            if (ltrim(line).startsWith("#")) {
-                while (rtrim(line).endsWith("\\")) {
-                    line += "\n" + this.getLine();
-                }
-                const proc = ltrim(line).substring(1);
-                const cmdRes = await this.handleCmd(proc, line);
-                result.push(...cmdRes);
-            } else {
-                result.push(this.processLine(line));
-            }
-
-            output.push(...result);
-        }
-
-        return output.join("\n");
     }
 
     private async handleCmd(line: string, raw: string): Promise<string[]> {
@@ -517,7 +517,7 @@ export class PPFileHandler {
             return `` +
                 `// INCLUDE START '${opath}' @ ${Path.basename(this.filePath)}(${this.line})\n`
                 + (await handler.process())
-                + `// INCLUDE END - ${handler.sha}`;
+                + `\n// INCLUDE END - ${Path.basename(this.filePath)} ${handler.sha}`;
         } catch (e) {
             if (e instanceof Deno.errors.NotFound) {
                 throw this.croakOnLine(`Cannot find '${opath}' to include`);
