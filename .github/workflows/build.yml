@@ -16,7 +16,7 @@ jobs:
           deno-version: v1.21.x
       - uses: actions/checkout@v2
       - name: echo version
-        run: echo -e "export const VERSION = \"${GITHUB_REF#refs/*/}\";\n" > src/version.ts
+        run: echo -e "export const VERSION = \"${GITHUB_REF#refs/*/}\";\n" > src/version.ts && cat src/version.ts
       - name: cache deps
         run: deno task cache
       - name: build
