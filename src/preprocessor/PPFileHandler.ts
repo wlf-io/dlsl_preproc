@@ -74,7 +74,13 @@ export class PPFileHandler {
             const line = this.getLine();
             const proc = ltrim(line).toLowerCase();
             if (proc.startsWith("#tag") || proc.startsWith("#label")) {
-                await this.handleCmd(ltrim(line).substring(1), line);
+                try {
+                    await this.handleCmd(ltrim(line).substring(1), line);
+                }
+                catch (e) {
+                    console.log("(1)Error processing line: \n-----------------------\n" + line + "\n-----------------------");
+                    throw e;
+                }
             }
         }
 
@@ -89,8 +95,13 @@ export class PPFileHandler {
                     line += "\n" + this.getLine();
                 }
                 const proc = ltrim(line).substring(1);
-                const cmdRes = await this.handleCmd(proc, line);
-                result.push(...cmdRes);
+                try {
+                    const cmdRes = await this.handleCmd(proc, line);
+                    result.push(...cmdRes);
+                } catch (e) {
+                    console.log("(2)Error processing line: \n-----------------------\n" + line + "\n-----------------------");
+                    throw e;
+                }
             } else {
                 result.push(this.processLine(line));
             }
@@ -156,6 +167,8 @@ export class PPFileHandler {
             }
         }
         this.text = this.prefix + this.text;
+        this.text = this.text.replaceAll("\r\n", "\n");
+        this.text = this.text.replaceAll("\r", "");
     }
 
     private getDefine(key: string) {
