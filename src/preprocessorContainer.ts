@@ -21,7 +21,7 @@ export class PreProcessorContainer {
         this.config = config;
         this.preprocessor = preprocessor;
         this.watcher = new Watcher(config);
-        this.watcher.hook(() => {
+        this.watcher.hookModify(() => {
             this.process();
         });
     }

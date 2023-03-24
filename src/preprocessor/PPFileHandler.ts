@@ -92,6 +92,8 @@ export class PPFileHandler {
 
             if (ltrim(line).startsWith("#")) {
                 while (rtrim(line).endsWith("\\")) {
+                    line = rtrim(line);
+                    line = line.substring(0, line.length - 1)
                     line += "\n" + this.getLine();
                 }
                 const proc = ltrim(line).substring(1);
@@ -230,7 +232,7 @@ export class PPFileHandler {
                         stringInterp = true;
                         stream.next();
                         continue;
-                    }
+                    } else out += stream.next();
                 }
                 out += stream.readWhileTrue(c => !this.isSymbolChar(c) && c !== '"' && c !== "@");
             }
@@ -301,7 +303,16 @@ export class PPFileHandler {
                     if (arg == "") throw this.croakOnLine(`name for #define empty`);
                     this.preprocessor.define(arg, parts.join(" ").trim());
                 } else {
-                    throw this.croakOnLine(`#define invalid`);
+                    throw this.croakOnLine(`#${cmd} invalid`);
+                }
+                break;
+            case "append":
+                if (parts.length > 0) {
+                    const arg = arg1();
+                    if (arg == "") throw this.croakOnLine(`name for #define empty`);
+                    this.preprocessor.append(arg, parts.join(" ").trim());
+                } else {
+                    throw this.croakOnLine(`#${cmd} invalid`);
                 }
                 break;
             case "increment": {
@@ -529,7 +540,7 @@ export class PPFileHandler {
             const handler = new PPFileHandler(path, this.preprocessor, [...this.stack], rest);
             return `` +
                 `// INCLUDE START '${opath}' @ ${Path.basename(this.filePath)}(${this.line})\n`
-                + (await handler.process())
+                + (await handler.process()).trim()
                 + `\n// INCLUDE END - ${Path.basename(this.filePath)} ${handler.sha}`;
         } catch (e) {
             if (e instanceof Deno.errors.NotFound) {

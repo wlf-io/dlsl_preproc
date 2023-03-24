@@ -73,7 +73,7 @@ export class InstanceConfig {
         }
         if(this.file == null){
             this.noFile = true;
-            this.file = "main.lsl";
+            this.file = prompt("File name?", "main.lsl");
         }
         if(this.dir == null){
             prompt

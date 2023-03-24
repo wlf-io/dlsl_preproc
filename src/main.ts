@@ -3,6 +3,7 @@ import { InstanceConfig } from "./config/instanceConfig.ts";
 import { PreProcessorContainer as PreProcContainer } from "./preprocessorContainer.ts";
 import { getHomeDir } from "./misc.ts";
 import { VERSION } from "./version.ts";
+import { FileDeleteWatcher } from "./fileDeleteWatcher.ts";
 
 let listen: Deno.Listener | null = null;
 
@@ -10,21 +11,24 @@ const running: { [k: string]: Deno.Process } = {};
 
 
 function runProc(config: InstanceConfig) {
-    if (running[config.dirPath] === undefined) {
-        running[config.dirPath] = Deno.run({
+    if (running[config.filePath] === undefined) {
+        running[config.filePath] = Deno.run({
             cmd: [config.params.editor.path, ...config.params.editor.args, config.dirPath]
         });
     }
-    return running[config.dirPath];
+    return running[config.filePath];
 }
 
 function procEnd(config: InstanceConfig, proc: Deno.Process) {
-    const old = running[config.dirPath] ?? null;
+    const old = running[config.filePath] ?? null;
     if (old === null) return;
     if (old.pid == proc.pid) {
-        delete running[config.dirPath];
+        console.log("Instance End:", config.filePath);
+        delete running[config.filePath];
         if (Object.keys(running).length < 1) {
             if (end) end();
+        } else {
+            console.log(Object.keys(running).length, "instances left");
         }
     }
 }
@@ -127,9 +131,15 @@ async function startProc(args: string[]) {
     console.log("Starting new watcher: ", iconfig.filePath);
     const p = runProc(iconfig);
     const preProc = new PreProcContainer(iconfig, PreProcContainer.getPreProc(iconfig));
+
+
+    const fd = new FileDeleteWatcher(filePath);
+
     preProc.start();
-    await p.status();
+    await Promise.race([p.status(), fd.watch()]);
     preProc.stop();
+    fd.stop();
+    p.close();
     procEnd(iconfig, p);
 }
 
@@ -174,7 +184,8 @@ async function run() {
     updateCheck();
     await init();
     console.log("Finished");
-
+    throw "e";
+    //Deno.exit();
 }
 
 try {
@@ -186,5 +197,5 @@ try {
         console.error(e);
     }
     alert("PreProc Error...");
-    Deno.exit();
+    Deno.exit(1);
 }

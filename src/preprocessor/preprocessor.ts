@@ -1,6 +1,6 @@
 import type { InstanceConfig, ConfInstance } from "../config/instanceConfig.ts";
-import type {iPreprocessor} from "../interfaces.d.ts";
-import {PPFileHandler} from "./PPFileHandler.ts";
+import type { iPreprocessor } from "../interfaces.d.ts";
+import { PPFileHandler } from "./PPFileHandler.ts";
 import { setObjValueByPath } from "../hack.js";
 
 export class Preprocessor implements iPreprocessor {
@@ -11,6 +11,7 @@ export class Preprocessor implements iPreprocessor {
     private _cache: { [k: string]: string } = {};
 
     private defines: { [k: string]: string | null } = {};
+    private appends: { [k: string]: string } = {};
 
     private files: string[] = [];
 
@@ -42,12 +43,12 @@ export class Preprocessor implements iPreprocessor {
         this.files = [];
         this._cache = {};
     }
-    
-    async processFile(filePath: string) : Promise<string> {
+
+    async processFile(filePath: string): Promise<string> {
         this.reset();
-        const fileHandler = new PPFileHandler(filePath,this,[]);
+        const fileHandler = new PPFileHandler(filePath, this, []);
         fileHandler.prefix = this.allwaysInclude;
-        return await fileHandler.process();
+        return (await fileHandler.process()) + "\n" + Object.values(this.appends).join("\n");
     }
 
     cache(key: string, value: string): void {
@@ -71,7 +72,7 @@ export class Preprocessor implements iPreprocessor {
         this.defines[key] = this.getDefine(value) ?? value;
     }
 
-    undefine(key:string) : void {
+    undefine(key: string): void {
         this.defines[key] = null;
     }
 
@@ -85,8 +86,11 @@ export class Preprocessor implements iPreprocessor {
         }
         setObjValueByPath(param, value, this.config.params);
     }
+    append(name: string, content: string) {
+        this.appends[name] = content;
+    }
 
-    private defaultDefines(){
+    private defaultDefines() {
         this.define("__UNIXTIME__", Math.floor(Date.now() * 0.001).toString());
     }
 }
